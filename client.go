@@ -64,6 +64,16 @@ type newRegResult struct {
 	Err    error
 }
 
+type rpcResult struct {
+	msg proto.Message
+	err error
+}
+
+type CallResult struct {
+	Result *hrpc.Result
+	Err error
+}
+
 // region -> client cache.
 type regionClientCache struct {
 	m sync.Mutex
@@ -224,6 +234,8 @@ type Client interface {
 	CheckTable(ctx context.Context, table string) error
 	Scan(s *hrpc.Scan) ([]*hrpc.Result, error)
 	Get(g *hrpc.Get) (*hrpc.Result, error)
+	// Gets notice that the total cost-time is proportional to len(gets) as sequential-execution
+	Gets(gets []*hrpc.Get) []CallResult
 	Put(p *hrpc.Mutate) (*hrpc.Result, error)
 	Delete(d *hrpc.Mutate) (*hrpc.Result, error)
 	Append(a *hrpc.Mutate) (*hrpc.Result, error)
@@ -386,6 +398,22 @@ func (c *client) Get(g *hrpc.Get) (*hrpc.Result, error) {
 	}
 
 	return hrpc.ToLocalResult(r.Result), nil
+}
+
+func (c *client) Gets(gets []*hrpc.Get) (res []CallResult) {
+	getsNum := len(gets)
+	if getsNum == 0 {
+		return
+	}
+	res = make([]CallResult, getsNum)
+	for i, get := range gets {
+		getResult, err := c.Get(get)
+		res[i] = CallResult{
+			Result: getResult,
+			Err: err,
+		}
+	}
+	return
 }
 
 func (c *client) Put(p *hrpc.Mutate) (*hrpc.Result, error) {
